@@ -1,0 +1,25 @@
+name: calendar
+version: 0.1.0
+description: Store and plan calendar events
+author: AnotherMe
+entrypoint: plugin
+capabilities:
+  - tools
+  - routes
+  - storage
+  - prompts
+  - ui
+dependencies: []
+ui:
+  tab: Calendar
+  icon: calendar
+  order: 50
+settings:
+  - key: default_view
+    label: "Default view"
+    type: select
+    default: "week"
+    options: ["week", "month"]
+    description: "Default calendar view"
+tables:
+  - calendar_events

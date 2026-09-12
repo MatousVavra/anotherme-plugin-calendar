@@ -1,0 +1,62 @@
+<div class="calendar-layout" x-data="calendarPlugin()">
+    <div class="calendar-composer">
+        <div class="calendar-header">
+            <span class="calendar-header-label">New event</span>
+            <span class="calendar-saving" x-show="saving">Saving...</span>
+        </div>
+        <input
+            class="calendar-title-input"
+            x-model="formTitle"
+            placeholder="Event title"
+        >
+        <div class="calendar-form-row">
+            <input
+                type="date"
+                class="calendar-date-input"
+                x-model="formDate"
+            >
+            <input
+                type="time"
+                class="calendar-time-input"
+                x-model="formTime"
+            >
+        </div>
+        <textarea
+            class="calendar-note-input"
+            x-model="formNote"
+            placeholder="Note (optional)"
+            rows="2"
+        ></textarea>
+        <button
+            class="save-btn calendar-save-btn"
+            @click="saveCalendarEvent()"
+            :disabled="!formTitle.trim() || !formDate || saving"
+            x-text="saving ? 'Saving...' : 'Save Event'"
+        ></button>
+    </div>
+
+    <div class="calendar-events">
+        <div class="timeline-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span x-text="showPast ? 'Past events' : 'Upcoming events'"></span>
+            <button class="calendar-toggle-btn" @click="togglePast()" x-text="showPast ? 'Show Upcoming' : 'Show Past'"></button>
+        </div>
+        <template x-if="events.length === 0">
+            <div class="timeline-empty">No events yet</div>
+        </template>
+        <template x-for="event in events" :key="event.id">
+            <div class="event-card">
+                <div class="event-card-header">
+                    <div class="event-card-title" x-text="event.title"></div>
+                    <button class="event-delete-btn" @click="deleteCalendarEvent(event.id)" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
+                <div class="event-card-date">
+                    <span x-text="AM.utils.formatDate(event.date)"></span>
+                    <span x-show="event.time" x-text="event.time"></span>
+                </div>
+                <div class="event-card-note" x-show="event.note" x-text="event.note"></div>
+            </div>
+        </template>
+    </div>
+</div>
