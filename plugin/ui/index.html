@@ -1,62 +1,257 @@
 <div class="calendar-layout" x-data="calendarPlugin()">
-    <div class="calendar-composer">
-        <div class="calendar-header">
-            <span class="calendar-header-label">New event</span>
-            <span class="calendar-saving" x-show="saving">Saving...</span>
+    <div class="cal-toolbar">
+        <div class="cal-nav">
+            <button class="cal-nav-btn" @click="prev()" aria-label="Previous period">&#8249;</button>
+            <button class="cal-today-btn" @click="goToday()">Today</button>
+            <button class="cal-nav-btn" @click="next()" aria-label="Next period">&#8250;</button>
+            <span class="cal-period" x-text="periodLabel()"></span>
         </div>
-        <input
-            class="calendar-title-input"
-            x-model="formTitle"
-            placeholder="Event title"
-        >
-        <div class="calendar-form-row">
+        <div class="cal-toolbar-right">
+            <div class="cal-view-switch">
+                <button :class="{ active: view === 'month' }" @click="switchView('month')">Month</button>
+                <button :class="{ active: view === 'week' }" @click="switchView('week')">Week</button>
+                <button :class="{ active: view === 'agenda' }" @click="switchView('agenda')">Agenda</button>
+            </div>
             <input
-                type="date"
-                class="calendar-date-input"
-                x-model="formDate"
+                type="text"
+                class="cal-search"
+                placeholder="Search events..."
+                x-model="search"
+                @input="onSearch()"
             >
-            <input
-                type="time"
-                class="calendar-time-input"
-                x-model="formTime"
-            >
+            <button class="cal-new-btn" @click="openCreate()">+</button>
         </div>
-        <textarea
-            class="calendar-note-input"
-            x-model="formNote"
-            placeholder="Note (optional)"
-            rows="2"
-        ></textarea>
-        <button
-            class="save-btn calendar-save-btn"
-            @click="saveCalendarEvent()"
-            :disabled="!formTitle.trim() || !formDate || saving"
-            x-text="saving ? 'Saving...' : 'Save Event'"
-        ></button>
     </div>
 
-    <div class="calendar-events">
-        <div class="timeline-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <span x-text="showPast ? 'Past events' : 'Upcoming events'"></span>
-            <button class="calendar-toggle-btn" @click="togglePast()" x-text="showPast ? 'Show Upcoming' : 'Show Past'"></button>
-        </div>
-        <template x-if="events.length === 0">
-            <div class="timeline-empty">No events yet</div>
-        </template>
-        <template x-for="event in events" :key="event.id">
-            <div class="event-card">
-                <div class="event-card-header">
-                    <div class="event-card-title" x-text="event.title"></div>
-                    <button class="event-delete-btn" @click="deleteCalendarEvent(event.id)" title="Delete">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+    <div class="cal-body">
+        <template x-if="view === 'month'">
+            <div class="cal-month">
+                <div class="cal-month-head">
+                    <template x-for="d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']" :key="d">
+                        <span class="cal-month-dow" x-text="d"></span>
+                    </template>
                 </div>
-                <div class="event-card-date">
-                    <span x-text="AM.utils.formatDate(event.date)"></span>
-                    <span x-show="event.time" x-text="event.time"></span>
+                <div class="cal-month-grid">
+                    <template x-for="week in monthMatrix()" :key="week[0].dateStr">
+                        <template x-for="day in week" :key="day.dateStr">
+                            <div
+                                class="cal-cell"
+                                :class="{ today: day.isToday, out: !day.inMonth, selected: selectedDate === day.dateStr, droppable: dragEvent }"
+                                @click="selectedDate = day.dateStr"
+                                @dragover.prevent
+                                @drop="onDayDrop(day, $event)"
+                            >
+                                <span class="cal-cell-num" x-text="day.date.getDate()"></span>
+                                <template x-for="ev in eventsForDay(day.dateStr).slice(0, 3)" :key="ev.id + '-' + ev.date">
+                                    <div
+                                        class="cal-chip"
+                                        :style="chipStyle(ev)"
+                                        draggable="true"
+                                        @click.stop="openEdit(ev)"
+                                        @dragstart="onChipDragStart(ev, $event)"
+                                        @dragend="dragEvent = null"
+                                    >
+                                        <span class="cal-chip-dot" :style="{ background: colorHex(ev.color) }"></span>
+                                        <span class="cal-chip-time" x-show="ev.time" x-text="fmtTime(ev.time)"></span>
+                                        <span class="cal-chip-title" x-text="ev.title"></span>
+                                        <span class="cal-chip-repeat" x-show="ev.recurrence">&#8635;</span>
+                                    </div>
+                                </template>
+                                <button
+                                    class="cal-more"
+                                    x-show="eventsForDay(day.dateStr).length > 3"
+                                    @click.stop="selectedDate = day.dateStr"
+                                    x-text="'+' + (eventsForDay(day.dateStr).length - 3) + ' more'"
+                                ></button>
+                            </div>
+                        </template>
+                    </template>
                 </div>
-                <div class="event-card-note" x-show="event.note" x-text="event.note"></div>
+                <div class="cal-day-panel" x-show="selectedDate && eventsForDay(selectedDate).length > 0">
+                    <div class="cal-day-panel-head">
+                        <span x-text="fmtDayLabel(selectedDate)"></span>
+                        <span class="cal-day-count" x-text="eventsForDay(selectedDate).length + ' event' + (eventsForDay(selectedDate).length === 1 ? '' : 's')"></span>
+                    </div>
+                    <template x-for="ev in eventsForDay(selectedDate)" :key="ev.id + '-' + ev.date">
+                        <button class="cal-day-row" @click="openEdit(ev)">
+                            <span class="cal-chip-dot" :style="{ background: colorHex(ev.color) }"></span>
+                            <span class="cal-day-row-time" x-text="ev.time ? fmtTime(ev.time) : 'All day'"></span>
+                            <span class="cal-day-row-title" x-text="ev.title"></span>
+                            <span class="cal-day-row-badge" x-show="ev.recurrence" x-text="ev.recurrence"></span>
+                        </button>
+                    </template>
+                </div>
             </div>
         </template>
+
+        <template x-if="view === 'week'">
+            <div class="cal-week">
+                <div class="cal-week-head">
+                    <span class="cal-week-gutter-head"></span>
+                    <template x-for="day in weekDays()" :key="day.dateStr">
+                        <div class="cal-week-dow" :class="{ today: day.isToday }">
+                            <span class="cal-week-dow-name" x-text="day.date.toLocaleDateString(undefined, { weekday: 'short' })"></span>
+                            <span class="cal-week-dow-num" x-text="day.date.getDate()"></span>
+                        </div>
+                    </template>
+                </div>
+                <div class="cal-week-allday-bar">
+                    <span class="cal-week-allday-label">All day</span>
+                    <template x-for="day in weekDays()" :key="'bar-' + day.dateStr">
+                        <div class="cal-week-allday-slot">
+                            <template x-for="ev in allDayEvents(day.dateStr)" :key="ev.id + '-' + ev.date">
+                                <div
+                                    class="cal-week-allday-chip"
+                                    :style="chipStyle(ev)"
+                                    draggable="true"
+                                    @click.stop="openEdit(ev)"
+                                    @dragstart="onChipDragStart(ev, $event)"
+                                    @dragend="dragEvent = null"
+                                >
+                                    <span x-text="ev.title"></span>
+                                    <span class="cal-chip-repeat" x-show="ev.recurrence">&#8635;</span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+                <div class="cal-week-scroll">
+                    <div class="cal-week-inner">
+                        <div class="cal-week-gutter">
+                            <template x-for="h in 24" :key="h">
+                                <span class="cal-hour-label" :style="{ top: ((h - 1) * 48) + 'px' }" x-text="(((h - 1) % 12) === 0 ? 12 : (h - 1) % 12) + ((h - 1) < 12 ? ' AM' : ' PM')"></span>
+                            </template>
+                        </div>
+                        <div class="cal-week-grid">
+                            <template x-for="day in weekDays()" :key="day.dateStr">
+                                <div
+                                    class="cal-week-col"
+                                    :class="{ today: day.isToday }"
+                                    @click="weekSlotClick(day, $event)"
+                                    @dragover.prevent
+                                    @drop="onWeekDrop(day, $event)"
+                                >
+                                    <template x-for="ev in timedEvents(day.dateStr)" :key="ev.id + '-' + ev.date">
+                                        <div
+                                            class="cal-week-event"
+                                            :style="[chipStyle(ev), { top: eventTop(ev) + 'px', height: eventHeight(ev) + 'px', borderColor: colorHex(ev.color) }]"
+                                            draggable="true"
+                                            @click.stop="openEdit(ev)"
+                                            @dragstart="onChipDragStart(ev, $event)"
+                                            @dragend="dragEvent = null"
+                                        >
+                                            <span class="cal-week-event-time" x-text="fmtTime(ev.time)"></span>
+                                            <span class="cal-week-event-title" x-text="ev.title"></span>
+                                        </div>
+                                    </template>
+                                    <div class="cal-now-line" x-show="nowLineTop(day.dateStr) !== null" :style="{ top: nowLineTop(day.dateStr) + 'px' }"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template x-if="view === 'agenda'">
+            <div class="cal-agenda">
+                <div class="cal-empty" x-show="agendaGroups().length === 0">
+                    <span x-text="search ? 'No events match your search' : 'No events yet'"></span>
+                </div>
+                <template x-for="group in agendaGroups()" :key="group.date">
+                    <div class="cal-agenda-group">
+                        <div class="cal-agenda-date" x-text="fmtDayLabel(group.date)"></div>
+                        <template x-for="ev in group.events" :key="ev.id + '-' + ev.date">
+                            <button class="cal-day-row" @click="openEdit(ev)">
+                                <span class="cal-chip-dot" :style="{ background: colorHex(ev.color) }"></span>
+                                <span class="cal-day-row-time" x-text="ev.time ? fmtTime(ev.time) : 'All day'"></span>
+                                <span class="cal-day-row-title" x-text="ev.title"></span>
+                                <span class="cal-day-row-badge" x-show="ev.recurrence" x-text="ev.recurrence"></span>
+                            </button>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+
+    <div class="cal-dialog-backdrop" x-cloak x-show="dialogOpen" @click.self="closeDialog()" x-transition.opacity>
+        <div class="cal-dialog" x-show="dialogOpen" x-transition>
+            <div class="cal-dialog-head">
+                <span x-text="editing ? 'Edit event' : 'New event'"></span>
+                <button class="cal-dialog-close" @click="closeDialog()" aria-label="Close">&#10005;</button>
+            </div>
+            <div class="cal-dialog-note" x-show="editing && editing.recurrence">This is a repeating event — edits apply to the whole series.</div>
+            <input class="cal-input cal-input-title" x-model="formTitle" placeholder="Event title">
+            <div class="cal-dialog-row">
+                <label class="cal-field">
+                    <span>Date</span>
+                    <input type="date" class="cal-input" x-model="formDate">
+                </label>
+                <label class="cal-field">
+                    <span>Time</span>
+                    <input type="time" class="cal-input" x-model="formTime">
+                </label>
+            </div>
+            <div class="cal-dialog-row">
+                <label class="cal-field">
+                    <span>Repeat</span>
+                    <select class="cal-input" x-model="formRecurrence">
+                        <option value="">Does not repeat</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                    </select>
+                </label>
+                <label class="cal-field" x-show="formRecurrence">
+                    <span>Until</span>
+                    <input type="date" class="cal-input" x-model="formRecurrenceEnd">
+                </label>
+                <label class="cal-field" x-show="!formRecurrence">
+                    <span>Ends (multi-day)</span>
+                    <input type="date" class="cal-input" x-model="formEndDate">
+                </label>
+            </div>
+            <div class="cal-dialog-row">
+                <label class="cal-field">
+                    <span>Color</span>
+                    <div class="cal-swatches">
+                        <template x-for="(hex, key) in COLORS" :key="key">
+                            <button
+                                class="cal-swatch"
+                                :class="{ selected: formColor === key }"
+                                :style="{ background: hex }"
+                                @click="formColor = formColor === key ? '' : key"
+                                :aria-label="key"
+                            ></button>
+                        </template>
+                    </div>
+                </label>
+            </div>
+            <textarea class="cal-input cal-input-note" x-model="formNote" placeholder="Note (optional)" rows="2"></textarea>
+            <div class="cal-dialog-actions">
+                <button
+                    class="cal-btn cal-btn-danger"
+                    x-show="editing"
+                    :disabled="saving"
+                    @click="editing && editing.recurrence ? (deleteMode = deleteMode === 'choose' ? null : 'choose') : deleteEvent(false)"
+                    x-text="editing && editing.recurrence && deleteMode === 'choose' ? 'Cancel delete' : 'Delete'"
+                ></button>
+                <template x-if="editing && editing.recurrence && deleteMode === 'choose'">
+                    <div class="cal-delete-choice">
+                        <button class="cal-btn" :disabled="saving" @click="deleteEvent(true)">This event</button>
+                        <button class="cal-btn cal-btn-danger" :disabled="saving" @click="deleteEvent(false)">All events</button>
+                    </div>
+                </template>
+                <div class="cal-dialog-spacer"></div>
+                <button class="cal-btn" @click="closeDialog()">Cancel</button>
+                <button
+                    class="cal-btn cal-btn-primary"
+                    :disabled="!formTitle.trim() || !formDate || saving"
+                    @click="saveEvent()"
+                    x-text="saving ? 'Saving…' : 'Save'"
+                ></button>
+            </div>
+        </div>
     </div>
 </div>
